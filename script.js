@@ -69,20 +69,16 @@ document.addEventListener("DOMContentLoaded", () => {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       const audioCtx = new AudioContext();
 
-      // For iOS, we need to play and immediately pause both audio files
-      // This "unlocks" the audio for later playback
-      boxingBell.play().catch((e) => console.log("Bell init play failed:", e));
+      // Unlock bell & countdown
+      boxingBell.play().catch(() => {});
       setTimeout(() => boxingBell.pause(), 50);
-
-      countdownSound
-        .play()
-        .catch((e) => console.log("Countdown init play failed:", e));
+      countdownSound.play().catch(() => {});
       setTimeout(() => countdownSound.pause(), 50);
 
-      // Also unlock speech synthesis
-      const utterance = new SpeechSynthesisUtterance("");
-      utterance.volume = 0.01;
-      speechSynthesis.speak(utterance);
+      // Unlock speech synthesis: use a non-empty utterance
+      const unlockUtter = new SpeechSynthesisUtterance("Start");
+      unlockUtter.volume = 0;
+      window.speechSynthesis.speak(unlockUtter);
 
       audioInitialized = true;
       console.log("Audio initialized for iOS device");
@@ -94,12 +90,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Function to play boxing bell
   function playBell() {
     try {
-      // Always try to ensure audio is initialized (for iOS)
-      if (isIOS && !audioInitialized) {
-        initAudio();
-      }
+      if (isIOS && !audioInitialized) initAudio();
 
-      // For iOS, we need to create a new audio instance each time
       if (isIOS) {
         const newBell = new Audio("boxing_bell.mp4");
         newBell.volume = 1.0;
@@ -107,8 +99,7 @@ document.addEventListener("DOMContentLoaded", () => {
           console.error("Error playing bell:", error);
         });
       } else {
-        // For non-iOS devices, reuse the audio element
-        boxingBell.currentTime = 0; // Reset to start
+        boxingBell.currentTime = 0;
         boxingBell.play().catch((error) => {
           console.error("Error playing bell:", error);
         });
@@ -120,24 +111,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Function to play countdown
   function playCountdown() {
-    // Only start if not already playing
     if (!countdownPlaying) {
       countdownPlaying = true;
       try {
-        // Always try to ensure audio is initialized (for iOS)
-        if (isIOS && !audioInitialized) {
-          initAudio();
-        }
+        if (isIOS && !audioInitialized) initAudio();
 
-        // For iOS, create a new audio instance
         if (isIOS) {
           const newCountdown = new Audio("countdown.mp4");
           newCountdown.volume = 1.0;
           newCountdown
             .play()
-            .then(() => {
-              console.log("Countdown played successfully");
-            })
             .catch((error) => {
               console.error("Error playing countdown:", error);
             })
@@ -145,13 +128,9 @@ document.addEventListener("DOMContentLoaded", () => {
               countdownPlaying = false;
             });
         } else {
-          // For non-iOS, reuse the audio element
-          countdownSound.currentTime = 0; // Reset to start
+          countdownSound.currentTime = 0;
           countdownSound
             .play()
-            .then(() => {
-              console.log("Countdown played successfully");
-            })
             .catch((error) => {
               console.error("Error playing countdown:", error);
             })
@@ -184,36 +163,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // Speech synthesis voices
   let voices = [];
 
-  // Load and cache voices - with better prioritization for coach-like voices
+  // Load and cache voices
   function loadVoices() {
     voices = speechSynthesis.getVoices();
     console.log("Loaded voices:", voices.length);
-
-    // Log available voices for debugging
-    if (voices.length > 0) {
-      voices.forEach((voice) => {
-        console.log(
-          `Voice: ${voice.name}, Lang: ${voice.lang}, Default: ${voice.default}`
-        );
-      });
-    }
   }
-
-  // Try to load voices immediately
   loadVoices();
-
-  // Also set up the event for when voices change/load
   if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = loadVoices;
   }
 
-  // Update interval display when slider changes
+  // Update interval display
   intervalSlider.addEventListener("input", () => {
     intervalValue.textContent =
       parseFloat(intervalSlider.value).toFixed(1) + "s";
   });
 
-  // Update voice speed display when slider changes
+  // Update voice speed display
   voiceSpeedSlider.addEventListener("input", () => {
     voiceSpeedValue.textContent =
       parseFloat(voiceSpeedSlider.value).toFixed(1) + "x";
@@ -236,7 +202,6 @@ document.addEventListener("DOMContentLoaded", () => {
     removeBtn.classList.add("remove-move");
     removeBtn.textContent = "✕";
     removeBtn.addEventListener("click", () => {
-      // Only allow removal if it's not the last move
       if (moves.length > 1) {
         moveList.removeChild(li);
         moves = moves.filter((m) => m !== move);
@@ -266,86 +231,35 @@ document.addEventListener("DOMContentLoaded", () => {
       .padStart(2, "0")}`;
   }
 
-  // Speech synthesis for moves - with improved voice selection and iOS handling
+  // Speech synthesis for moves
   function speakMove() {
     const randomIndex = Math.floor(Math.random() * moves.length);
     const move = moves[randomIndex];
     console.log("Speaking move:", move);
 
-    // Always ensure "FIGHT ON!" is showing during rounds
     if (!isBreak && currentMoveDisplay.textContent !== "FIGHT ON!") {
       currentMoveDisplay.textContent = "FIGHT ON!";
     }
 
-    // Only speak during rounds, not during breaks
     if (!isBreak) {
       try {
-        // Always try to ensure audio is initialized (for iOS)
-        if (isIOS && !audioInitialized) {
-          initAudio();
-        }
+        if (isIOS && !audioInitialized) initAudio();
 
         const utterance = new SpeechSynthesisUtterance(move);
+        utterance.volume = 1.0;
+        utterance.rate = parseFloat(voiceSpeedSlider.value);
+        utterance.pitch = 1.0;
 
-        // Set default voice properties for a good boxing coach voice
-        utterance.volume = 1.0; // Maximum volume
-        utterance.rate = parseFloat(voiceSpeedSlider.value); // Use slider value for speech rate
-        utterance.pitch = 1.0; // Natural pitch
-
-        // Find the best voice options
-        // 1. Try to find a good English voice, avoiding the annoying ones
-        const preferredVoices = [
-          // First look for these specific good voices
-          "Daniel",
-          "Alex",
-          "Nathan",
-          "Oliver",
-          "Matthew",
-          "James",
-          "Tom",
-          // Then fall back to any decent male voice
-          "Male",
-          "en-US",
-          "en-GB",
-          "en-AU",
-        ];
-
-        // Try to find one of our preferred voices
-        let selectedVoice = null;
-
-        // First attempt: look for specific voice names
-        for (const voiceName of preferredVoices) {
-          const voice = voices.find(
-            (v) => v.name.includes(voiceName) && !v.name.includes("Google")
-          );
-          if (voice) {
-            selectedVoice = voice;
-            console.log(`Found preferred voice: ${voice.name}`);
-            break;
-          }
-        }
-
-        // Second attempt: if no preferred voice found, try any reasonable fallback
-        if (!selectedVoice) {
-          selectedVoice =
-            voices.find(
-              (v) => v.lang.includes("en-") && !v.name.includes("Google")
-            ) || voices.find((v) => v.default === true);
-        }
+        // pick a good English voice
+        let selectedVoice =
+          voices.find((v) => v.name.includes("Alex")) ||
+          voices.find((v) => v.lang.includes("en-")) ||
+          voices.find((v) => v.default);
 
         if (selectedVoice) {
           utterance.voice = selectedVoice;
-          console.log(`Using voice: ${selectedVoice.name}`);
-        } else {
-          console.log("Using default voice - no suitable voice found");
         }
 
-        // Add error handling
-        utterance.onerror = (event) => {
-          console.error("Speech synthesis error:", event);
-        };
-
-        // Speak the move
         speechSynthesis.speak(utterance);
       } catch (error) {
         console.error("Speech synthesis failed:", error);
@@ -360,31 +274,22 @@ document.addEventListener("DOMContentLoaded", () => {
     timerScreen.classList.remove("hidden");
     timerScreen.style.display = "flex";
 
-    // Force browser to recognize the change
     setTimeout(() => {
-      console.log("Timer screen should be visible now");
-
       let countdownTime = 10;
       timerDisplay.textContent = formatTime(countdownTime);
       currentMoveDisplay.textContent = "GET READY!";
-
-      // Play the countdown audio
       playCountdown();
 
-      // Update display every second
       function updateCountdown() {
         if (countdownTime > 0) {
           timerDisplay.textContent = formatTime(countdownTime);
           countdownTime--;
           countdownTimeoutId = setTimeout(updateCountdown, 1000);
         } else {
-          // Play bell to signal round start
           playBell();
-          // Start the first round
           startRound();
         }
       }
-
       updateCountdown();
     }, 100);
   }
@@ -394,20 +299,10 @@ document.addEventListener("DOMContentLoaded", () => {
     isBreak = false;
     timeRemaining = roundLength;
     updateTimerDisplay();
-
-    // Update round display
     currentRoundDisplay.textContent = currentRound;
-
-    // Set display to "FIGHT ON!" during the round
     currentMoveDisplay.textContent = "FIGHT ON!";
-
-    // Call speakMove immediately to announce the first move
     speakMove();
-
-    // Set interval for speaking moves
     moveIntervalId = setInterval(speakMove, moveInterval * 1000);
-
-    // Start the timer
     startTimer();
   }
 
@@ -417,31 +312,10 @@ document.addEventListener("DOMContentLoaded", () => {
     isBreak = true;
     timeRemaining = breakLength;
     updateTimerDisplay();
-
-    // Play bell to signal round end
     playBell();
-
-    // IMMEDIATELY clear the move interval - no speaking during breaks
     clearInterval(moveIntervalId);
-
-    // Multiple approaches to ensure speech stops completely
-    try {
-      // Cancel any pending speech
-      window.speechSynthesis.cancel();
-
-      // Double check by clearing any ongoing speech
-      if (window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
-        console.log("Forced stop of any ongoing speech");
-      }
-    } catch (e) {
-      console.error("Error stopping speech:", e);
-    }
-
-    // Set break display
+    window.speechSynthesis.cancel();
     currentMoveDisplay.textContent = "BREAK";
-
-    // Start the timer
     startTimer();
   }
 
@@ -457,38 +331,25 @@ document.addEventListener("DOMContentLoaded", () => {
       timeRemaining--;
       updateTimerDisplay();
 
-      // Play countdown sound in the last 10 seconds of a BREAK
       if (isBreak && timeRemaining === 10) {
         playCountdown();
       }
 
-      // Play bell at the very end of a break (when transitioning to a round)
       if (timeRemaining === 0) {
-        if (isBreak) {
-          // At end of break, play bell for round start
-          playBell();
-        } else {
-          // At end of round, play bell for round end (break start)
-          playBell();
-        }
+        playBell();
       }
 
-      // End of round/break
       if (timeRemaining <= 0) {
         clearInterval(timer);
 
         if (isBreak) {
-          // End of break, start next round
           currentRound++;
-
           if (currentRound > totalRounds) {
-            // End of workout
             endWorkout();
           } else {
             startRound();
           }
         } else {
-          // End of round, start break
           startBreak();
         }
       }
@@ -499,32 +360,23 @@ document.addEventListener("DOMContentLoaded", () => {
   function endWorkout() {
     console.log("Workout complete!");
     isRunning = false;
-    isPaused = false; // Reset the pause state
+    isPaused = false;
     currentRound = 1;
-
-    // Play final bell
     playBell();
-
-    // Clear any remaining timers
     clearInterval(timer);
     clearInterval(moveIntervalId);
     clearTimeout(countdownTimeoutId);
-
-    // Reset the UI
     timerScreen.classList.add("hidden");
     timerScreen.style.display = "none";
     setupPanel.classList.remove("hidden");
     currentMoveDisplay.textContent = "";
     pauseBtn.textContent = "PAUSE";
-
-    // Show completion message
     alert("Workout complete! Great job!");
   }
 
   // Pause the timer
   pauseBtn.addEventListener("click", () => {
     if (isRunning) {
-      // Pause the timer
       clearInterval(timer);
       clearInterval(moveIntervalId);
       isRunning = false;
@@ -532,15 +384,9 @@ document.addEventListener("DOMContentLoaded", () => {
       pauseBtn.textContent = "RESUME";
       console.log("Timer paused");
     } else if (isPaused) {
-      // Resume the timer
-      console.log("Resuming timer, isBreak:", isBreak);
-
-      // Only restart move announcements if not in a break
       if (!isBreak) {
         moveIntervalId = setInterval(speakMove, moveInterval * 1000);
       }
-
-      // Restart the timer
       startTimer();
       pauseBtn.textContent = "PAUSE";
       isPaused = false;
@@ -553,12 +399,9 @@ document.addEventListener("DOMContentLoaded", () => {
     clearInterval(timer);
     clearInterval(moveIntervalId);
     clearTimeout(countdownTimeoutId);
-
     isRunning = false;
     isPaused = false;
     currentRound = 1;
-
-    // Make sure we properly reset the display
     timerScreen.classList.add("hidden");
     timerScreen.style.display = "none";
     setupPanel.classList.remove("hidden");
@@ -566,9 +409,27 @@ document.addEventListener("DOMContentLoaded", () => {
     pauseBtn.textContent = "PAUSE";
   });
 
-  // Start workout and initialize audio on first user click
+  // Start workout: prime & initialize audio, then grab inputs
   startBtn.addEventListener("click", () => {
-    // Initialize audio on first user interaction (important for iOS)
+    // Prime audio & TTS on first tap
+    boxingBell
+      .play()
+      .then(() => {
+        boxingBell.pause();
+        boxingBell.currentTime = 0;
+      })
+      .catch(() => {});
+    countdownSound
+      .play()
+      .then(() => {
+        countdownSound.pause();
+        countdownSound.currentTime = 0;
+      })
+      .catch(() => {});
+    const primeUt = new SpeechSynthesisUtterance("Ready");
+    primeUt.volume = 0;
+    window.speechSynthesis.speak(primeUt);
+
     initAudio();
 
     // Get round length
@@ -600,7 +461,6 @@ document.addEventListener("DOMContentLoaded", () => {
     // Update total rounds display
     totalRoundsDisplay.textContent = totalRounds;
 
-    // Validate inputs (ensure we have at least some time)
     if (roundLength <= 0) {
       alert("Please set a round length greater than 0 seconds.");
       return;
@@ -610,10 +470,10 @@ document.addEventListener("DOMContentLoaded", () => {
     startCountdown();
   });
 
-  // Set up handlers to initialize audio on all types of user interaction
+  // Also prime audio on any user interaction (fallback)
   document.addEventListener("click", initAudio, { once: true });
   document.addEventListener("touchstart", initAudio, { once: true });
 
-  // Initialize
+  // Initialize move list UI
   populateDefaultMoves();
 });
