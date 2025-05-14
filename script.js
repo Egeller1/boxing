@@ -21,6 +21,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const totalRoundsDisplay = document.getElementById("total-rounds");
   const currentMoveDisplay = document.getElementById("current-move");
 
+  // Flag to track if audio has been initialized by user interaction
+  let audioInitialized = false;
+
   // Default boxing moves
   const defaultMoves = [
     "Jab",
@@ -43,22 +46,73 @@ document.addEventListener("DOMContentLoaded", () => {
   // Audio elements for bell and countdown
   const boxingBell = new Audio("boxing_bell.mp4");
   boxingBell.volume = 1.0;
-  boxingBell.load();
+  boxingBell.preload = "auto";
 
   const countdownSound = new Audio("countdown.mp4");
   countdownSound.volume = 1.0;
-  countdownSound.load();
+  countdownSound.preload = "auto";
 
   // Flag to track when countdown is playing
   let countdownPlaying = false;
 
+  // Check if device is iOS
+  const isIOS =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  console.log("Is iOS device:", isIOS);
+
+  // Initialize audio (for iOS devices which require user interaction)
+  function initAudio() {
+    if (audioInitialized) return;
+
+    try {
+      // Create a silent audio context for iOS
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioContext();
+
+      // For iOS, we need to play and immediately pause both audio files
+      // This "unlocks" the audio for later playback
+      boxingBell.play().catch((e) => console.log("Bell init play failed:", e));
+      setTimeout(() => boxingBell.pause(), 50);
+
+      countdownSound
+        .play()
+        .catch((e) => console.log("Countdown init play failed:", e));
+      setTimeout(() => countdownSound.pause(), 50);
+
+      // Also unlock speech synthesis
+      const utterance = new SpeechSynthesisUtterance("");
+      utterance.volume = 0.01;
+      speechSynthesis.speak(utterance);
+
+      audioInitialized = true;
+      console.log("Audio initialized for iOS device");
+    } catch (e) {
+      console.error("Audio initialization failed:", e);
+    }
+  }
+
   // Function to play boxing bell
   function playBell() {
     try {
-      boxingBell.currentTime = 0; // Reset to start
-      boxingBell.play().catch((error) => {
-        console.error("Error playing bell:", error);
-      });
+      // Always try to ensure audio is initialized (for iOS)
+      if (isIOS && !audioInitialized) {
+        initAudio();
+      }
+
+      // For iOS, we need to create a new audio instance each time
+      if (isIOS) {
+        const newBell = new Audio("boxing_bell.mp4");
+        newBell.volume = 1.0;
+        newBell.play().catch((error) => {
+          console.error("Error playing bell:", error);
+        });
+      } else {
+        // For non-iOS devices, reuse the audio element
+        boxingBell.currentTime = 0; // Reset to start
+        boxingBell.play().catch((error) => {
+          console.error("Error playing bell:", error);
+        });
+      }
     } catch (error) {
       console.error("Error with bell playback:", error);
     }
@@ -70,18 +124,41 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!countdownPlaying) {
       countdownPlaying = true;
       try {
-        countdownSound.currentTime = 0; // Reset to start
-        countdownSound
-          .play()
-          .then(() => {
-            console.log("Countdown played successfully");
-          })
-          .catch((error) => {
-            console.error("Error playing countdown:", error);
-          })
-          .finally(() => {
-            countdownPlaying = false;
-          });
+        // Always try to ensure audio is initialized (for iOS)
+        if (isIOS && !audioInitialized) {
+          initAudio();
+        }
+
+        // For iOS, create a new audio instance
+        if (isIOS) {
+          const newCountdown = new Audio("countdown.mp4");
+          newCountdown.volume = 1.0;
+          newCountdown
+            .play()
+            .then(() => {
+              console.log("Countdown played successfully");
+            })
+            .catch((error) => {
+              console.error("Error playing countdown:", error);
+            })
+            .finally(() => {
+              countdownPlaying = false;
+            });
+        } else {
+          // For non-iOS, reuse the audio element
+          countdownSound.currentTime = 0; // Reset to start
+          countdownSound
+            .play()
+            .then(() => {
+              console.log("Countdown played successfully");
+            })
+            .catch((error) => {
+              console.error("Error playing countdown:", error);
+            })
+            .finally(() => {
+              countdownPlaying = false;
+            });
+        }
       } catch (error) {
         console.error("Error with countdown playback:", error);
         countdownPlaying = false;
@@ -189,7 +266,7 @@ document.addEventListener("DOMContentLoaded", () => {
       .padStart(2, "0")}`;
   }
 
-  // Speech synthesis for moves - with improved voice selection
+  // Speech synthesis for moves - with improved voice selection and iOS handling
   function speakMove() {
     const randomIndex = Math.floor(Math.random() * moves.length);
     const move = moves[randomIndex];
@@ -203,6 +280,11 @@ document.addEventListener("DOMContentLoaded", () => {
     // Only speak during rounds, not during breaks
     if (!isBreak) {
       try {
+        // Always try to ensure audio is initialized (for iOS)
+        if (isIOS && !audioInitialized) {
+          initAudio();
+        }
+
         const utterance = new SpeechSynthesisUtterance(move);
 
         // Set default voice properties for a good boxing coach voice
@@ -484,8 +566,11 @@ document.addEventListener("DOMContentLoaded", () => {
     pauseBtn.textContent = "PAUSE";
   });
 
-  // Start workout
+  // Start workout and initialize audio on first user click
   startBtn.addEventListener("click", () => {
+    // Initialize audio on first user interaction (important for iOS)
+    initAudio();
+
     // Get round length
     const roundMins =
       parseInt(document.getElementById("round-minutes").value) || 0;
@@ -524,6 +609,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // Start the countdown
     startCountdown();
   });
+
+  // Set up handlers to initialize audio on all types of user interaction
+  document.addEventListener("click", initAudio, { once: true });
+  document.addEventListener("touchstart", initAudio, { once: true });
 
   // Initialize
   populateDefaultMoves();
